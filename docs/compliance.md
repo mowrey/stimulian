@@ -25,9 +25,11 @@ facts that analysis depends on true:
 | Client alone recovers funds after the refund deadline | redeem script (`OP_CHECKLOCKTIMEVERIFY` branch) |
 | Refund deadline is in the future, at most two years out (warned past one year, and under one day) | `checkRefundLockTime` |
 | Three distinct keys | `buildRedeemScript` |
-| Mainnet refused unless explicitly allowed (the CLI never allows it) | `buildEscrow`, `verifierCosignDecision` |
+| Mainnet refused unless explicitly allowed **and** the legal-review gate is set (it is not; the CLI never opts in) | `LEGAL_GATES` in `src/compliance/gates.ts`, `buildEscrow`, `buildPayload`, `verifierCosignDecision` |
 | Verifier co-signs only a proof-backed release to the contractor, or a release under a signed dispute resolution | `verifierCosignDecision`, `src/kaspa/policy.ts` |
-| Escrow never pays the verifier or Stimuli Network (no fee outputs) | `verifierCosignDecision`, `PLATFORM_FEE_FROM_ESCROW = false` |
+| Escrow never pays the verifier or Stimuli Network (no fee outputs), whatever the fee gate says | `verifierCosignDecision`, `PLATFORM_FEE_FROM_ESCROW = false` |
+| No fee code runs until an attorney signs off (gate is false) | `assertFeesAllowed`, `LEGAL_GATES.feesAttorneySignoff` |
+| Every co-signature is screened against OFAC's SDN address list, refused if the list is over 30 days old | `cosign-check`, `data/ofac-sdn-digital-currency-addresses.json` |
 | Verifier never holds client or contractor keys | by construction: it only ever signs with its own key |
 
 ### Why the verifier needs a policy
@@ -45,16 +47,41 @@ signs:
   signed; otherwise the client waits for the timelocked refund, which needs no
   one else;
 - never pays an operator address, never runs on mainnet, and refuses any
-  address on the sanctions denylist.
+  address on the OFAC SDN list (bundled) or an extra denylist.
 
-Try it with `node src/cli.ts cosign-check --request cosign.json --denylist list.txt --operator <stimuli address>`.
+Try it with `node src/cli.ts cosign-check --request cosign.json --operator <stimuli address> [--denylist extra.txt]`.
+
+## Legal gates
+
+`src/compliance/gates.ts` holds two flags, both `false`:
+
+- `mainnetLegalReviewComplete`: mainnet escrow building, proof signing and
+  co-signing stay refused until a written legal review approves mainnet.
+- `feesAttorneySignoff`: no fee code path may run until a Minnesota
+  fintech / money-transmission attorney signs off in writing on a specific fee
+  model. There are no fees during testnet/beta.
+
+They are code constants on purpose: no environment variable or CLI flag can
+flip them. Changing one takes a reviewed pull request that links the written
+sign-off and updates this file. The Stimuli Network API has matching flags that
+refuse to start if set, because the API has no mainnet or fee support at all.
+
+## Verifier keys
+
+See [key-custody.md](key-custody.md): per-environment, rotated testnet keys;
+for mainnet, a hardware-backed key held offline by Adrian, never on a server,
+with per-escrow derived keys and a rotation and compromise procedure.
 
 ### Fees
 
-Fees are never taken as an escrow output. If Stimuli Network ever charges a fee,
-the plan is to invoice it separately from the escrow, so the escrow only ever
-moves value from client to contractor (or back to the client). Whether any fee
-model changes the money transmission analysis is an open question for counsel.
+Decision (2026-11-23): **no fees at all during testnet/beta.** Fees are never
+taken as an escrow output, even after an attorney signs off: any future fee is
+invoiced separately from the escrow, so the escrow only ever moves value from
+client to contractor (or back to the client). The verifier policy refuses an
+operator output unconditionally, and `assertFeesAllowed` keeps any fee code
+path off until `LEGAL_GATES.feesAttorneySignoff` is set after written sign-off.
+Whether any fee model changes the money transmission analysis is a question for
+counsel before mainnet.
 
 ### Refund timelock edge cases
 
@@ -74,10 +101,17 @@ model changes the money transmission analysis is an open question for counsel.
 OFAC sanctions apply to virtual currency the same way as to fiat, and OFAC asks
 technology and wallet providers to screen from the testing stage on
 ([OFAC guidance for the virtual currency industry, 2021](https://ofac.treasury.gov/media/913571/download)).
-`src/compliance/screening.ts` is a hook: it checks addresses against a denylist
-the operator supplies. It ships with no list. Before any real-money use the
-operator needs a maintained list (OFAC SDN digital currency addresses and/or a
-screening vendor) plus person and geography screening at onboarding.
+`src/compliance/screening.ts` checks addresses against OFAC's SDN digital
+currency addresses, bundled in `data/` and refreshed by hand with
+`scripts/update-ofac-sdn.ts` (free official source, no vendor). See
+[sanctions-screening.md](sanctions-screening.md) for the refresh procedure, the
+30-day fail-closed rule, the sign-up self-attestation in the app, and what is
+still missing before mainnet (IP geoblocking, onboarding name screening).
+
+## Before any mainnet, real funds or fees
+
+A consult with a Minnesota fintech / money-transmission attorney is a hard gate
+before mainnet, real funds, or any fee. Until then both legal gates stay false.
 
 ## Not in this repository
 

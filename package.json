@@ -12,7 +12,8 @@
   },
   "scripts": {
     "test": "node --test \"test/**/*.test.ts\"",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "sdn:update": "node scripts/update-ofac-sdn.ts"
   },
   "devDependencies": {
     "@types/node": "22.20.5",

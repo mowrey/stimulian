@@ -32,7 +32,11 @@ the verifier key as the `STIMULI_VERIFIER_KEY` secret.
 
 Build a milestone's Kaspa escrow address with `node src/cli.ts escrow` (testnet only; mainnet is refused).
 Before co-signing a release, a verifier runs `node src/cli.ts cosign-check` to apply its
-signing policy. See [docs/compliance.md](docs/compliance.md) for why (not legal advice).
+signing policy, including screening against OFAC's SDN address list bundled in `data/`
+(refresh with `npm run sdn:update`). See [docs/compliance.md](docs/compliance.md),
+[docs/sanctions-screening.md](docs/sanctions-screening.md) and
+[docs/key-custody.md](docs/key-custody.md) (not legal advice). Mainnet and fees are
+locked in code (`src/compliance/gates.ts`) until legal review.
 
 ## Cascade model
 

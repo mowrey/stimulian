@@ -6,6 +6,9 @@ import { blake2b } from "../src/kaspa/blake2b.ts";
 import { buildEscrow, buildRedeemScript, checkRefundLockTime, LOCK_TIME_THRESHOLD, parseLockTime, refundSignatureScript, releaseSignatureScript } from "../src/kaspa/escrow.ts";
 import { disassemble, hex, ScriptBuilder } from "../src/kaspa/script.ts";
 
+// Test-only gates, as if legal review were done, to check address encoding.
+const REVIEWED = { mainnetLegalReviewComplete: true, feesAttorneySignoff: false } as const;
+
 test("blake2b matches RFC 7693 / Node's blake2b512", () => {
   const abc = new TextEncoder().encode("abc");
   assert.equal(hex.to(blake2b(abc, 64)), createHash("blake2b512").update("abc").digest("hex"));
@@ -60,12 +63,14 @@ test("escrow address changes with any term", () => {
   assert.notEqual(buildEscrow({ ...params, specSha256: "cd".repeat(32) }).address, base);
   assert.notEqual(buildEscrow({ ...params, refundLockTime: 123_456_790n }).address, base);
   assert.notEqual(buildEscrow({ ...params, contractorPubKey: "44".repeat(32) }).address, base);
-  assert.notEqual(buildEscrow({ ...params, network: "kaspa-mainnet", allowMainnet: true }).address, base);
+  assert.notEqual(buildEscrow({ ...params, network: "kaspa-mainnet", allowMainnet: true, gates: REVIEWED }).address, base);
 });
 
-test("escrow refuses mainnet unless explicitly allowed", () => {
+test("escrow refuses mainnet unless explicitly allowed and legally reviewed", () => {
   assert.throws(() => buildEscrow({ ...params, network: "kaspa-mainnet" }), /testnet-only/);
-  assert.match(buildEscrow({ ...params, network: "kaspa-mainnet", allowMainnet: true }).address, /^kaspa:p/);
+  // the opt-in alone is not enough: the legal-review gate is off by default
+  assert.throws(() => buildEscrow({ ...params, network: "kaspa-mainnet", allowMainnet: true }), /testnet-only until legal review/);
+  assert.match(buildEscrow({ ...params, network: "kaspa-mainnet", allowMainnet: true, gates: REVIEWED }).address, /^kaspa:p/);
 });
 
 test("escrow rejects bad parameters", () => {
