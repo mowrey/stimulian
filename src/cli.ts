@@ -5,6 +5,7 @@ import { parseArgs } from "node:util";
 import { checkAll } from "./criteria.ts";
 import { buildPayload, generateVerifierKey, signProof, verifyProof, type MilestoneProof } from "./proof.ts";
 import { buildEscrow, parseLockTime } from "./kaspa/escrow.ts";
+import { cascadeReport, simulateCascade } from "./model/cascade.ts";
 import { loadSpec, specHash } from "./spec.ts";
 
 const USAGE = `stimulian — Stimuli Network milestone verifier
@@ -16,6 +17,7 @@ const USAGE = `stimulian — Stimuli Network milestone verifier
   verify-proof  --proof <proof.json> [--spec <milestone.json>] [--trusted-key <base64>]...
   escrow        --spec <milestone.json> --client-key <hex> --contractor-key <hex> --verifier-key <hex>
                 --refund-after <DAA score | ISO date>     (keys: 32-byte x-only Schnorr, hex)
+  cascade       --n <fan-out> --delta <fidelity> [--hops 12] [--runs <monte carlo runs>] [--seed 1]
 
 GITHUB_TOKEN is used for github_check criteria when set.`;
 
@@ -26,6 +28,7 @@ const { positionals, values } = parseArgs({
     key: { type: "string" }, out: { type: "string" }, proof: { type: "string" },
     "trusted-key": { type: "string", multiple: true }, "client-key": { type: "string" },
     "contractor-key": { type: "string" }, "verifier-key": { type: "string" }, "refund-after": { type: "string" }, "allow-exec": { type: "boolean", default: false },
+    n: { type: "string" }, delta: { type: "string" }, hops: { type: "string", default: "12" }, runs: { type: "string" }, seed: { type: "string", default: "1" },
     help: { type: "boolean", short: "h" },
   },
 });
@@ -89,6 +92,15 @@ async function main(): Promise<number> {
     });
     console.log(JSON.stringify({ milestoneId: spec.id, amountSompi: spec.payout.amountSompi, ...escrow }, null, 2));
     if (spec.payout.network === "kaspa-mainnet") console.error("warning: mainnet escrow. Stimuli Network tooling is testnet-only until legal review.");
+    return 0;
+  }
+
+  if (cmd === "cascade") {
+    const p = { n: Number(need("n", values.n)), delta: Number(need("delta", values.delta)) };
+    const hops = Number(values.hops);
+    const report: Record<string, unknown> = { ...cascadeReport(p, hops) };
+    if (values.runs) report.monteCarlo = simulateCascade(p, { hops, runs: Number(values.runs), seed: Number(values.seed) });
+    console.log(JSON.stringify(report, (_, v) => (v === Infinity ? "Infinity" : v), 2));
     return 0;
   }
 

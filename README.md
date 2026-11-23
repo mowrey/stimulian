@@ -31,5 +31,15 @@ the verifier key as the `STIMULI_VERIFIER_KEY` secret.
 
 Build a milestone's Kaspa escrow address with `node src/cli.ts escrow` (testnet only for now).
 
+## Cascade model
+
+`src/model/cascade.ts` implements the propagation model from A. Mowrey,
+*From Spark to Swarm* (Stimuli.Network working paper, November 2026): with fan-out
+`n` and per-hop fidelity `delta`, shared value fades when `n * delta < 1` and
+compounds when it is above 1. It gives closed-form reach and value, the regime,
+survival probability, and a seeded Monte Carlo check, tested against the paper's
+Table 1. Try `node src/cli.ts cascade --n 4 --delta 0.3`. Details in
+[docs/cascade-model.md](docs/cascade-model.md).
+
 See [docs/architecture.md](docs/architecture.md) for the trust model, the escrow
 design, and the roadmap.
