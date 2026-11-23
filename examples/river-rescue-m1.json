@@ -1,0 +1,18 @@
+{
+  "schema": "stimuli.milestone/v1",
+  "id": "river-rescue-m1",
+  "title": "Rescue asset registry: data model and inventory API",
+  "description": "Hardin County, IL mutual-aid registry. Milestone 1 delivers the equipment and watercraft data model with a tested read/write API.",
+  "repo": "example-client/river-rescue-registry",
+  "client": { "name": "Hardin County mutual-aid group (example)" },
+  "contractor": { "github": "student-builder" },
+  "payout": { "amountSompi": "150000000000", "network": "kaspa-testnet-10" },
+  "criteria": [
+    { "id": "tests", "type": "github_check", "name": "milestone-tests" },
+    { "id": "readme", "type": "file_exists", "path": "README.md" },
+    { "id": "schema", "type": "file_exists", "path": "src/schema.sql" },
+    { "id": "api-has-inventory", "type": "file_contains", "path": "src/routes.ts", "pattern": "/inventory" },
+    { "id": "no-private-keys", "type": "forbid_pattern", "pattern": "-----BEGIN [A-Z ]*PRIVATE KEY-----" },
+    { "id": "no-hardcoded-tokens", "type": "forbid_pattern", "pattern": "(ghp_[A-Za-z0-9]{36}|AKIA[0-9A-Z]{16})" }
+  ]
+}

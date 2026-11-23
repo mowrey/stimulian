@@ -1,0 +1,51 @@
+# CLIENT repo: .github/workflows/stimuli-milestone-proof.yml
+#
+# Runs after the tests workflow, in the client repo's own context, holding the
+# verifier key. It NEVER executes contractor code: it reads files at the
+# delivered commit, asks the GitHub API whether "milestone-tests" succeeded on
+# that exact commit, and signs the result.
+#
+# The spec comes from the client's default branch, not from the pull request,
+# so a contractor cannot weaken the criteria they are judged by.
+name: stimuli-milestone-proof
+on:
+  workflow_run:
+    workflows: [stimuli-milestone-tests]
+    types: [completed]
+permissions:
+  contents: read
+  checks: read
+jobs:
+  milestone-proof:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Agreed milestone spec (default branch)
+        uses: actions/checkout@v4
+        with: { path: agreed, persist-credentials: false, sparse-checkout: .stimuli }
+      - name: Delivered commit (read only, never executed)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          path: delivered
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with: { repository: mowrey/stimulian, path: stimulian, persist-credentials: false }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Prove milestone
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          VERIFIER_KEY: ${{ secrets.STIMULI_VERIFIER_KEY }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          umask 077 && printf '%s' "$VERIFIER_KEY" > "$RUNNER_TEMP/key.pem"
+          node stimulian/src/cli.ts prove \
+            --spec agreed/.stimuli/milestone.json \
+            --repo-dir delivered \
+            --commit "$HEAD_SHA" \
+            --key "$RUNNER_TEMP/key.pem" \
+            --out proof.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: milestone-proof, path: proof.json, if-no-files-found: ignore }

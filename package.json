@@ -1,0 +1,13 @@
+{
+  "name": "stimulian",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Stimuli Network milestone verifier: checks delivered code against agreed criteria and issues signed proofs for non-custodial Kaspa escrow.",
+  "type": "module",
+  "bin": { "stimulian": "src/cli.ts" },
+  "engines": { "node": ">=22.18" },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.ts\"",
+    "typecheck": "npx -y -p typescript@5 tsc --noEmit"
+  }
+}
