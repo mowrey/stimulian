@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { checkAll } from "./criteria.ts";
 import { buildPayload, generateVerifierKey, signProof, verifyProof, type MilestoneProof } from "./proof.ts";
-import { buildEscrow, parseLockTime } from "./kaspa/escrow.ts";
+import { buildEscrow, checkRefundLockTime, parseLockTime } from "./kaspa/escrow.ts";
 import { cascadeReport, simulateCascade } from "./model/cascade.ts";
 import { estimateGainPerAlpha, simulateGateSweep, simulateRefinement } from "./model/convergence.ts";
 import { loadSpec, specHash } from "./spec.ts";
@@ -86,12 +86,14 @@ async function main(): Promise<number> {
 
   if (cmd === "escrow") {
     const spec = loadSpec(need("spec", values.spec));
+    const refundLockTime = parseLockTime(need("refund-after", values["refund-after"]));
+    for (const w of checkRefundLockTime(refundLockTime)) console.error(`warning: ${w}`);
     const escrow = buildEscrow({
       specSha256: specHash(spec),
       clientPubKey: need("client-key", values["client-key"]),
       contractorPubKey: need("contractor-key", values["contractor-key"]),
       verifierPubKey: need("verifier-key", values["verifier-key"]),
-      refundLockTime: parseLockTime(need("refund-after", values["refund-after"])),
+      refundLockTime,
       network: spec.payout.network,
     });
     console.log(JSON.stringify({ milestoneId: spec.id, amountSompi: spec.payout.amountSompi, ...escrow }, null, 2));
