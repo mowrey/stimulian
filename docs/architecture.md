@@ -65,6 +65,8 @@ OP_ENDIF
 - **Release:** contractor + verifier sign after a valid proof.
 - **Dispute:** client + contractor can always settle between themselves.
 - **Abandonment:** after the deadline, the client alone recovers the funds.
+  The CLI refuses a timestamp deadline that has already passed and warns when
+  it is more than a year away.
 
 No single party, Stimuli Network included, can move the funds alone: the
 non-custodial property the business plan relies on. Changing any term (spec,

@@ -108,6 +108,22 @@ export function refundSignatureScript(redeemScriptHex: string, clientSig: string
   return hex.to(new ScriptBuilder().addData(sig(clientSig)).addOp(OP.OP_0).addData(hex.from(redeemScriptHex)).build());
 }
 
+// Refund deadline sanity for timestamp lock times (DAA scores need a node to
+// judge, so they pass through). A deadline already in the past would let the
+// client reclaim funded escrow at any moment, removing the contractor's
+// protection, so it is refused. A deadline more than a year out is allowed but
+// flagged: the timelocked refund is what keeps any party from blocking the
+// client's funds indefinitely, so it should stay reachable.
+export const REFUND_WARN_AFTER_MS = 365n * 24n * 60n * 60n * 1000n;
+
+export function checkRefundLockTime(lockTime: bigint, nowMs: bigint = BigInt(Date.now())): string[] {
+  if (lockTime < LOCK_TIME_THRESHOLD) return [];
+  if (lockTime <= nowMs) throw new Error("refund deadline is already in the past; pick a future date");
+  return lockTime - nowMs > REFUND_WARN_AFTER_MS
+    ? ["refund deadline is more than a year away; the client cannot reclaim unreleased funds before then"]
+    : [];
+}
+
 // "2026-12-31" / ISO timestamp -> Unix ms; plain integer -> DAA score.
 export function parseLockTime(s: string): bigint {
   if (/^\d+$/.test(s)) return BigInt(s);

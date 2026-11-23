@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { test } from "node:test";
 import { decodeAddress, encodeAddress, VERSION } from "../src/kaspa/address.ts";
 import { blake2b } from "../src/kaspa/blake2b.ts";
-import { buildEscrow, buildRedeemScript, LOCK_TIME_THRESHOLD, parseLockTime, refundSignatureScript, releaseSignatureScript } from "../src/kaspa/escrow.ts";
+import { buildEscrow, buildRedeemScript, checkRefundLockTime, LOCK_TIME_THRESHOLD, parseLockTime, refundSignatureScript, releaseSignatureScript } from "../src/kaspa/escrow.ts";
 import { disassemble, hex, ScriptBuilder } from "../src/kaspa/script.ts";
 
 test("blake2b matches RFC 7693 / Node's blake2b512", () => {
@@ -84,4 +84,14 @@ test("lock time parsing", () => {
   assert.equal(parseLockTime("98765"), 98765n);
   assert.ok(parseLockTime("2027-03-01T00:00:00Z") >= LOCK_TIME_THRESHOLD);
   assert.throws(() => parseLockTime("1970-01-02"), /too early/);
+});
+
+test("refund deadline sanity", () => {
+  const now = BigInt(Date.parse("2026-11-23T12:00:00Z"));
+  const day = 24n * 60n * 60n * 1000n;
+  assert.deepEqual(checkRefundLockTime(98_765n, now), []); // DAA score: not judged offline
+  assert.deepEqual(checkRefundLockTime(now + 90n * day, now), []);
+  assert.throws(() => checkRefundLockTime(now - day, now), /already in the past/);
+  assert.throws(() => checkRefundLockTime(now, now), /already in the past/);
+  assert.match(checkRefundLockTime(now + 400n * day, now)[0], /more than a year/);
 });

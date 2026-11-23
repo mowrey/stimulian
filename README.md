@@ -23,7 +23,8 @@ node src/cli.ts prove  --spec milestone.json --repo-dir ../client-repo \
 node src/cli.ts verify-proof --proof proof.json --spec milestone.json --trusted-key <public key>
 ```
 
-Requires Node.js 22.18 or newer. No dependencies. `npm test` runs the suite.
+Requires Node.js 22.18 or newer. No runtime dependencies. `npm test` runs the suite;
+`npm ci && npm run typecheck` runs the strict TypeScript check.
 
 To use it on a client project, copy `examples/workflows/` into the client repo's
 `.github/workflows/`, commit the agreed spec to `.stimuli/milestone.json`, and add
