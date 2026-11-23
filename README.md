@@ -41,5 +41,16 @@ survival probability, and a seeded Monte Carlo check, tested against the paper's
 Table 1. Try `node src/cli.ts cascade --n 4 --delta 0.3`. Details in
 [docs/cascade-model.md](docs/cascade-model.md).
 
+## Convergence model
+
+`src/model/convergence.ts` implements the paper's convergence step and refinement
+loop: an initiator absorbs only responses whose validation score passes a gate
+`theta`, weighted by capability, at absorption rate `alpha`. A moderate gate cuts
+the error from systematically wrong contributors, and `alpha` has a stability
+bound that a stricter gate widens. It includes the paper's bias-variance and
+stability results and seeded simulations checked against Table 2 and Section 5.4.
+Try `node src/cli.ts gate --nodes 20` or `node src/cli.ts refine --alpha 1`.
+Details in [docs/convergence-model.md](docs/convergence-model.md).
+
 See [docs/architecture.md](docs/architecture.md) for the trust model, the escrow
 design, and the roadmap.
