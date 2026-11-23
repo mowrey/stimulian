@@ -60,7 +60,12 @@ test("escrow address changes with any term", () => {
   assert.notEqual(buildEscrow({ ...params, specSha256: "cd".repeat(32) }).address, base);
   assert.notEqual(buildEscrow({ ...params, refundLockTime: 123_456_790n }).address, base);
   assert.notEqual(buildEscrow({ ...params, contractorPubKey: "44".repeat(32) }).address, base);
-  assert.notEqual(buildEscrow({ ...params, network: "kaspa-mainnet" }).address, base);
+  assert.notEqual(buildEscrow({ ...params, network: "kaspa-mainnet", allowMainnet: true }).address, base);
+});
+
+test("escrow refuses mainnet unless explicitly allowed", () => {
+  assert.throws(() => buildEscrow({ ...params, network: "kaspa-mainnet" }), /testnet-only/);
+  assert.match(buildEscrow({ ...params, network: "kaspa-mainnet", allowMainnet: true }).address, /^kaspa:p/);
 });
 
 test("escrow rejects bad parameters", () => {
@@ -86,12 +91,25 @@ test("lock time parsing", () => {
   assert.throws(() => parseLockTime("1970-01-02"), /too early/);
 });
 
-test("refund deadline sanity", () => {
-  const now = BigInt(Date.parse("2026-11-23T12:00:00Z"));
+test("refund deadline bounds", () => {
+  const now = BigInt(Date.parse("Mon 2026-11-23 6:00 AM CST (UTC-06:00)"));
   const day = 24n * 60n * 60n * 1000n;
-  assert.deepEqual(checkRefundLockTime(98_765n, now), []); // DAA score: not judged offline
   assert.deepEqual(checkRefundLockTime(now + 90n * day, now), []);
   assert.throws(() => checkRefundLockTime(now - day, now), /already in the past/);
   assert.throws(() => checkRefundLockTime(now, now), /already in the past/);
   assert.match(checkRefundLockTime(now + 400n * day, now)[0], /more than a year/);
+  assert.throws(() => checkRefundLockTime(now + 731n * day, now), /more than two years/);
+  assert.match(checkRefundLockTime(now + day / 2n, now)[0], /less than a day/);
+  assert.throws(() => checkRefundLockTime(0n, now), /positive/);
+});
+
+test("refund deadline bounds for DAA scores", () => {
+  const now = 0n; // unused for DAA scores
+  assert.match(checkRefundLockTime(98_765n, now)[0], /not checked/);
+  const cur = 400_000_000n;
+  const perDay = 10n * 86_400n; // ~10 DAA per second after Crescendo
+  assert.deepEqual(checkRefundLockTime(cur + 30n * perDay, now, cur), []);
+  assert.throws(() => checkRefundLockTime(cur - 1n, now, cur), /already in the past/);
+  assert.throws(() => checkRefundLockTime(cur + 800n * perDay, now, cur), /more than two years/);
+  assert.match(checkRefundLockTime(cur + 1000n, now, cur)[0], /less than a day/);
 });

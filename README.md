@@ -30,7 +30,9 @@ To use it on a client project, copy `examples/workflows/` into the client repo's
 `.github/workflows/`, commit the agreed spec to `.stimuli/milestone.json`, and add
 the verifier key as the `STIMULI_VERIFIER_KEY` secret.
 
-Build a milestone's Kaspa escrow address with `node src/cli.ts escrow` (testnet only for now).
+Build a milestone's Kaspa escrow address with `node src/cli.ts escrow` (testnet only; mainnet is refused).
+Before co-signing a release, a verifier runs `node src/cli.ts cosign-check` to apply its
+signing policy. See [docs/compliance.md](docs/compliance.md) for why (not legal advice).
 
 ## Cascade model
 

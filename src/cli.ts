@@ -5,6 +5,8 @@ import { parseArgs } from "node:util";
 import { checkAll } from "./criteria.ts";
 import { buildPayload, generateVerifierKey, signProof, verifyProof, type MilestoneProof } from "./proof.ts";
 import { buildEscrow, checkRefundLockTime, parseLockTime } from "./kaspa/escrow.ts";
+import { verifierCosignDecision, type CosignRequest } from "./kaspa/policy.ts";
+import { loadDenylist } from "./compliance/screening.ts";
 import { cascadeReport, simulateCascade } from "./model/cascade.ts";
 import { estimateGainPerAlpha, simulateGateSweep, simulateRefinement } from "./model/convergence.ts";
 import { loadSpec, specHash } from "./spec.ts";
@@ -17,7 +19,10 @@ const USAGE = `stimulian — Stimuli Network milestone verifier
   prove         --spec <milestone.json> --commit <sha> --key <key.pem> [--repo-dir .] [--allow-exec] [--out proof.json]
   verify-proof  --proof <proof.json> [--spec <milestone.json>] [--trusted-key <base64>]...
   escrow        --spec <milestone.json> --client-key <hex> --contractor-key <hex> --verifier-key <hex>
-                --refund-after <DAA score | ISO date>     (keys: 32-byte x-only Schnorr, hex)
+                --refund-after <DAA score | ISO date> [--current-daa <score>]
+                (keys: 32-byte x-only Schnorr, hex; testnet only)
+  cosign-check  --request <cosign.json> [--denylist <file>] [--operator <address>]...
+                (verifier policy check before co-signing a release; exit 0 = allowed)
   cascade       --n <fan-out> --delta <fidelity> [--hops 12] [--runs <monte carlo runs>] [--seed 1]
   gate          --nodes <N> [--alpha 2] [--replications 3000] [--seed 1]      (theta sweep of one convergence step)
   refine        --alpha <rate> [--theta 0.6] [--rounds 40] [--runs 200] [--seed 1]   (recursive refinement)
@@ -30,7 +35,8 @@ const { positionals, values } = parseArgs({
     spec: { type: "string" }, "repo-dir": { type: "string", default: "." }, commit: { type: "string" },
     key: { type: "string" }, out: { type: "string" }, proof: { type: "string" },
     "trusted-key": { type: "string", multiple: true }, "client-key": { type: "string" },
-    "contractor-key": { type: "string" }, "verifier-key": { type: "string" }, "refund-after": { type: "string" }, "allow-exec": { type: "boolean", default: false },
+    "contractor-key": { type: "string" }, "verifier-key": { type: "string" }, "refund-after": { type: "string" }, "current-daa": { type: "string" },
+    request: { type: "string" }, denylist: { type: "string" }, operator: { type: "string", multiple: true }, "allow-exec": { type: "boolean", default: false },
     n: { type: "string" }, delta: { type: "string" }, hops: { type: "string", default: "12" }, runs: { type: "string" }, seed: { type: "string", default: "1" },
     nodes: { type: "string" }, alpha: { type: "string" }, theta: { type: "string", default: "0.6" }, rounds: { type: "string", default: "40" }, replications: { type: "string", default: "3000" },
     help: { type: "boolean", short: "h" },
@@ -87,7 +93,11 @@ async function main(): Promise<number> {
   if (cmd === "escrow") {
     const spec = loadSpec(need("spec", values.spec));
     const refundLockTime = parseLockTime(need("refund-after", values["refund-after"]));
-    for (const w of checkRefundLockTime(refundLockTime)) console.error(`warning: ${w}`);
+    const currentDaa = values["current-daa"];
+    if (currentDaa !== undefined && !/^\d+$/.test(currentDaa)) throw new Error("--current-daa must be a non-negative integer");
+    for (const w of checkRefundLockTime(refundLockTime, BigInt(Date.now()), currentDaa === undefined ? undefined : BigInt(currentDaa))) {
+      console.error(`warning: ${w}`);
+    }
     const escrow = buildEscrow({
       specSha256: specHash(spec),
       clientPubKey: need("client-key", values["client-key"]),
@@ -97,8 +107,28 @@ async function main(): Promise<number> {
       network: spec.payout.network,
     });
     console.log(JSON.stringify({ milestoneId: spec.id, amountSompi: spec.payout.amountSompi, ...escrow }, null, 2));
-    if (spec.payout.network === "kaspa-mainnet") console.error("warning: mainnet escrow. Stimuli Network tooling is testnet-only until legal review.");
     return 0;
+  }
+
+  if (cmd === "cosign-check") {
+    const raw = JSON.parse(readFileSync(need("request", values.request), "utf8")) as Omit<CosignRequest, "outputs"> & {
+      outputs: { address: string; amountSompi: string | number }[];
+    };
+    if (!Array.isArray(raw.outputs)) throw new Error("request.outputs must be an array");
+    const req: CosignRequest = {
+      ...raw,
+      outputs: raw.outputs.map((o) => {
+        if (!/^\d+$/.test(String(o.amountSompi))) throw new Error("output amountSompi must be an integer");
+        return { address: String(o.address), amountSompi: BigInt(o.amountSompi) };
+      }),
+    };
+    const decision = verifierCosignDecision(req, {
+      operatorAddresses: values.operator ?? [],
+      denylist: values.denylist ? loadDenylist(values.denylist) : undefined,
+    });
+    console.log(JSON.stringify(decision, null, 2));
+    if (!values.denylist) console.error("warning: no --denylist given; sanctions screening was skipped");
+    return decision.allow ? 0 : 1;
   }
 
   if (cmd === "cascade") {
