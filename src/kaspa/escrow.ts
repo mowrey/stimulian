@@ -13,6 +13,9 @@
 //   settle a dispute between themselves.
 // Refund: once the lock time passes, the client alone recovers the funds.
 // No single party, Stimuli Network's verifier included, can move funds alone.
+// The verifier plus one other party can, so the verifier only co-signs what
+// its policy allows (src/kaspa/policy.ts): a proof-backed release to the
+// contractor, or a signed dispute resolution. It is never paid from escrow.
 //
 // Kaspa specifics (rusty-kaspa crypto/txscript): keys are 32-byte x-only
 // Schnorr keys; OP_CHECKMULTISIG takes signatures in key order with no dummy
@@ -31,6 +34,10 @@ export interface EscrowParams {
   verifierPubKey: string;
   refundLockTime: bigint;   // DAA score (< threshold) or Unix ms (>= threshold)
   network: Network;
+  // Mainnet is refused unless the caller opts in explicitly. Stimuli Network
+  // tooling is testnet-only until legal review; tests use this to check
+  // address encoding only.
+  allowMainnet?: boolean;
 }
 
 export interface Escrow {
@@ -72,6 +79,9 @@ export function p2shScriptPublicKey(redeemScript: Uint8Array): Uint8Array {
 }
 
 export function buildEscrow(p: EscrowParams): Escrow {
+  if (p.network === "kaspa-mainnet" && !p.allowMainnet) {
+    throw new Error("mainnet escrow is disabled: Stimuli Network tooling is testnet-only until legal review");
+  }
   const redeem = buildRedeemScript(p);
   return {
     network: p.network,
@@ -108,20 +118,49 @@ export function refundSignatureScript(redeemScriptHex: string, clientSig: string
   return hex.to(new ScriptBuilder().addData(sig(clientSig)).addOp(OP.OP_0).addData(hex.from(redeemScriptHex)).build());
 }
 
-// Refund deadline sanity for timestamp lock times (DAA scores need a node to
-// judge, so they pass through). A deadline already in the past would let the
-// client reclaim funded escrow at any moment, removing the contractor's
-// protection, so it is refused. A deadline more than a year out is allowed but
-// flagged: the timelocked refund is what keeps any party from blocking the
-// client's funds indefinitely, so it should stay reachable.
-export const REFUND_WARN_AFTER_MS = 365n * 24n * 60n * 60n * 1000n;
+// Refund deadline bounds. The timelocked client refund is load-bearing: it is
+// what keeps the verifier (or anyone else) from blocking the client's funds
+// indefinitely, so the deadline must be real, reachable and not absurdly far.
+//   - in the past (or now): refused. The client could reclaim funded escrow at
+//     any moment, removing the contractor's protection.
+//   - more than REFUND_MAX_MS away: refused. Funds would sit out of the
+//     client's reach for years if the other parties stop cooperating.
+//   - more than REFUND_WARN_AFTER_MS away: allowed, flagged.
+//   - less than REFUND_MIN_LEAD_MS away: allowed, flagged (the contractor has
+//     almost no protected window to deliver).
+// DAA-score deadlines can only be judged against a current DAA score. Pass one
+// (from a node) to apply the same bounds; without it the deadline is flagged
+// as unchecked. Conversion uses Kaspa's 10 blocks per second (Crescendo,
+// KIP-14), so it is an estimate: DAA score advances at about 10 per second.
+const DAY_MS = 24n * 60n * 60n * 1000n;
+export const REFUND_MIN_LEAD_MS = DAY_MS;
+export const REFUND_WARN_AFTER_MS = 365n * DAY_MS;
+export const REFUND_MAX_MS = 2n * 365n * DAY_MS;
+export const DAA_SCORE_PER_SECOND = 10n;
 
-export function checkRefundLockTime(lockTime: bigint, nowMs: bigint = BigInt(Date.now())): string[] {
-  if (lockTime < LOCK_TIME_THRESHOLD) return [];
-  if (lockTime <= nowMs) throw new Error("refund deadline is already in the past; pick a future date");
-  return lockTime - nowMs > REFUND_WARN_AFTER_MS
-    ? ["refund deadline is more than a year away; the client cannot reclaim unreleased funds before then"]
-    : [];
+export function checkRefundLockTime(
+  lockTime: bigint,
+  nowMs: bigint = BigInt(Date.now()),
+  currentDaaScore?: bigint,
+): string[] {
+  if (lockTime <= 0n) throw new Error("refund lock time must be positive");
+  let leadMs: bigint;
+  if (lockTime >= LOCK_TIME_THRESHOLD) {
+    leadMs = lockTime - nowMs;
+  } else {
+    if (currentDaaScore === undefined) {
+      return ["refund deadline is a DAA score and was not checked; pass the current DAA score (--current-daa) to check it"];
+    }
+    leadMs = ((lockTime - currentDaaScore) * 1000n) / DAA_SCORE_PER_SECOND;
+  }
+  if (leadMs <= 0n) throw new Error("refund deadline is already in the past; pick a future date");
+  if (leadMs > REFUND_MAX_MS) {
+    throw new Error("refund deadline is more than two years away; the client's refund path must stay reachable");
+  }
+  const warnings: string[] = [];
+  if (leadMs > REFUND_WARN_AFTER_MS) warnings.push("refund deadline is more than a year away; the client cannot reclaim unreleased funds before then");
+  if (leadMs < REFUND_MIN_LEAD_MS) warnings.push("refund deadline is less than a day away; the contractor has almost no protected time to deliver");
+  return warnings;
 }
 
 // "2026-12-31" / ISO timestamp -> Unix ms; plain integer -> DAA score.

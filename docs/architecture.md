@@ -65,11 +65,15 @@ OP_ENDIF
 - **Release:** contractor + verifier sign after a valid proof.
 - **Dispute:** client + contractor can always settle between themselves.
 - **Abandonment:** after the deadline, the client alone recovers the funds.
-  The CLI refuses a timestamp deadline that has already passed and warns when
-  it is more than a year away.
+  The CLI refuses a deadline that has already passed or is more than two years
+  away, and warns past one year or under one day.
+- **Verifier policy:** the verifier plus one party can move funds, so the
+  verifier only co-signs a proof-backed release to the contractor or a signed
+  dispute resolution, never pays itself or Stimuli Network, and never runs on
+  mainnet (`cosign-check`, `src/kaspa/policy.ts`).
 
 No single party, Stimuli Network included, can move the funds alone: the
-non-custodial property the business plan relies on. Changing any term (spec,
+non-custodial property the design relies on. See [compliance.md](compliance.md). Changing any term (spec,
 keys, deadline, network) changes the address, so a funded address is itself
 proof of what was agreed.
 
