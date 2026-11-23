@@ -4,6 +4,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { checkAll } from "./criteria.ts";
 import { buildPayload, generateVerifierKey, signProof, verifyProof, type MilestoneProof } from "./proof.ts";
+import { buildEscrow, parseLockTime } from "./kaspa/escrow.ts";
 import { loadSpec, specHash } from "./spec.ts";
 
 const USAGE = `stimulian — Stimuli Network milestone verifier
@@ -13,6 +14,8 @@ const USAGE = `stimulian — Stimuli Network milestone verifier
   check         --spec <milestone.json> [--repo-dir .] [--commit <sha>] [--allow-exec]
   prove         --spec <milestone.json> --commit <sha> --key <key.pem> [--repo-dir .] [--allow-exec] [--out proof.json]
   verify-proof  --proof <proof.json> [--spec <milestone.json>] [--trusted-key <base64>]...
+  escrow        --spec <milestone.json> --client-key <hex> --contractor-key <hex> --verifier-key <hex>
+                --refund-after <DAA score | ISO date>     (keys: 32-byte x-only Schnorr, hex)
 
 GITHUB_TOKEN is used for github_check criteria when set.`;
 
@@ -21,7 +24,8 @@ const { positionals, values } = parseArgs({
   options: {
     spec: { type: "string" }, "repo-dir": { type: "string", default: "." }, commit: { type: "string" },
     key: { type: "string" }, out: { type: "string" }, proof: { type: "string" },
-    "trusted-key": { type: "string", multiple: true }, "allow-exec": { type: "boolean", default: false },
+    "trusted-key": { type: "string", multiple: true }, "client-key": { type: "string" },
+    "contractor-key": { type: "string" }, "verifier-key": { type: "string" }, "refund-after": { type: "string" }, "allow-exec": { type: "boolean", default: false },
     help: { type: "boolean", short: "h" },
   },
 });
@@ -71,6 +75,21 @@ async function main(): Promise<number> {
     const res = verifyProof(proof, { spec, trustedKeys: values["trusted-key"] });
     console.log(res.valid ? `VALID  milestone ${proof.payload.milestoneId} at ${proof.payload.commit}` : "INVALID\n  - " + res.reasons.join("\n  - "));
     return res.valid ? 0 : 1;
+  }
+
+  if (cmd === "escrow") {
+    const spec = loadSpec(need("spec", values.spec));
+    const escrow = buildEscrow({
+      specSha256: specHash(spec),
+      clientPubKey: need("client-key", values["client-key"]),
+      contractorPubKey: need("contractor-key", values["contractor-key"]),
+      verifierPubKey: need("verifier-key", values["verifier-key"]),
+      refundLockTime: parseLockTime(need("refund-after", values["refund-after"])),
+      network: spec.payout.network,
+    });
+    console.log(JSON.stringify({ milestoneId: spec.id, amountSompi: spec.payout.amountSompi, ...escrow }, null, 2));
+    if (spec.payout.network === "kaspa-mainnet") console.error("warning: mainnet escrow. Stimuli Network tooling is testnet-only until legal review.");
+    return 0;
   }
 
   console.error(`unknown command: ${cmd}\n\n${USAGE}`);

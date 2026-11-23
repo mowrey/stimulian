@@ -48,32 +48,54 @@ the contractor's code.
 | `github_check` | the named check run concluded `success` on the delivered commit |
 | `command` | a shell command exits 0 (local use only; needs `--allow-exec`) |
 
-## Escrow (next milestone: design, testnet only)
+## Escrow (testnet)
 
-Target: a 2-of-3 Kaspa P2SH script over Schnorr keys of **client**, **contractor**,
-and **Stimuli verifier**, plus a timelocked refund path to the client.
+`src/kaspa/escrow.ts` builds a P2SH escrow whose address is derived from the
+milestone spec hash, the three parties' keys, and the refund deadline:
 
-- Normal release: contractor + verifier sign, after a valid proof.
-- Dispute: client + contractor can always settle between themselves.
-- Abandonment: after the deadline, the client alone recovers the funds.
+```
+<specSha256> OP_DROP
+OP_IF
+  OP_2 <client> <contractor> <verifier> OP_3 OP_CHECKMULTISIG
+OP_ELSE
+  <refundLockTime> OP_CHECKLOCKTIMEVERIFY <client> OP_CHECKSIG
+OP_ENDIF
+```
 
-No single party, Stimuli Network included, can move the funds alone, which is
-the non-custodial property the business plan relies on. Kaspa's Crescendo
-upgrade (2025) added transaction-introspection opcodes (KIP-10), which may later
-let the script itself enforce that the output pays the contractor's address and
-amount from the spec; that needs to be confirmed against current kaspad before
-it is relied on.
+- **Release:** contractor + verifier sign after a valid proof.
+- **Dispute:** client + contractor can always settle between themselves.
+- **Abandonment:** after the deadline, the client alone recovers the funds.
+
+No single party, Stimuli Network included, can move the funds alone: the
+non-custodial property the business plan relies on. Changing any term (spec,
+keys, deadline, network) changes the address, so a funded address is itself
+proof of what was agreed.
+
+```bash
+node src/cli.ts escrow --spec milestone.json \
+  --client-key <hex> --contractor-key <hex> --verifier-key <hex> \
+  --refund-after 2027-03-01
+```
+
+Encoding follows rusty-kaspa (`crypto/txscript`, `crypto/addresses`): 32-byte
+x-only Schnorr keys, BLAKE2b-256 script hash, `OP_CHECKMULTISIG` with signatures
+in key order and no dummy element, `OP_CHECKLOCKTIMEVERIFY` that pops its operand,
+lock times below 500,000,000,000 read as DAA scores and above as Unix ms.
+Address encoding is tested against rusty-kaspa's own vectors.
 
 Open items before any mainnet use:
-- Verifier keys move from Ed25519 to the Schnorr (secp256k1) scheme Kaspa uses,
-  or the Ed25519 proof key is kept separate and attests to the escrow key.
+- Build and sign the funding and release transactions (Kaspa sighash) against
+  the official Kaspa WASM SDK, and run the full flow on testnet.
+- Give the verifier a Schnorr (secp256k1) key; the Ed25519 proof key attests to it.
 - Legal review of the escrow flow (money transmission) with counsel.
-- Work only on testnet (TN10/TN11) until both are done.
+- Kaspa's newer introspection opcodes (KIP-10) could let the script itself
+  enforce the payout address and amount; confirm what mainnet supports first.
 
 ## Roadmap
 
 1. ✅ Milestone verifier: spec, criteria, signed proofs, GitHub workflows.
-2. Kaspa testnet escrow: script builder, funding and release transactions.
-3. Client/contractor onboarding: milestone spec builder, B2B agreement and IP
+2. ✅ Kaspa escrow script and address builder.
+3. Testnet transactions: fund, release, refund via the Kaspa WASM SDK.
+4. Client/contractor onboarding: milestone spec builder, B2B agreement and IP
    assignment templates, contractor verification.
-4. Bot bounties: automated audits and test verification as operational credits.
+5. Bot bounties: automated audits and test verification as operational credits.

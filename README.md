@@ -29,5 +29,7 @@ To use it on a client project, copy `examples/workflows/` into the client repo's
 `.github/workflows/`, commit the agreed spec to `.stimuli/milestone.json`, and add
 the verifier key as the `STIMULI_VERIFIER_KEY` secret.
 
+Build a milestone's Kaspa escrow address with `node src/cli.ts escrow` (testnet only for now).
+
 See [docs/architecture.md](docs/architecture.md) for the trust model, the escrow
 design, and the roadmap.
