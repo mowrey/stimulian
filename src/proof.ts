@@ -2,6 +2,7 @@ import { createHash, createPrivateKey, createPublicKey, generateKeyPairSync, sig
 import { canonicalJson } from "./canonical.ts";
 import type { CriterionResult } from "./criteria.ts";
 import { specHash, type MilestoneSpec } from "./spec.ts";
+import { mainnetAllowed, MAINNET_REFUSED, type LegalGates } from "./compliance/gates.ts";
 
 export const PROOF_SCHEMA = "stimuli.proof/v1";
 
@@ -41,7 +42,14 @@ function importPublic(b64: string): KeyObject {
   return createPublicKey({ key: Buffer.from(b64, "base64"), format: "der", type: "spki" });
 }
 
-export function buildPayload(spec: MilestoneSpec, commit: string, results: CriterionResult[], publicKey: string, now = new Date()): ProofPayload {
+export function buildPayload(
+  spec: MilestoneSpec, commit: string, results: CriterionResult[], publicKey: string, now = new Date(),
+  opts: { allowMainnet?: boolean; gates?: LegalGates } = {},
+): ProofPayload {
+  // The verifier does not sign proofs for mainnet payouts until legal review.
+  if (spec.payout.network === "kaspa-mainnet" && !mainnetAllowed(opts.allowMainnet, opts.gates)) {
+    throw new Error(`refusing to sign a proof for a mainnet payout: ${MAINNET_REFUSED}`);
+  }
   if (!/^[0-9a-f]{40}$/.test(commit)) throw new Error("commit must be a full 40-character SHA");
   const ids = new Set(results.map((r) => r.id));
   const missing = spec.criteria.filter((c) => !ids.has(c.id)).map((c) => c.id);

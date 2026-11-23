@@ -16,14 +16,18 @@
 //   3. Never pay the verifier, Stimuli Network, or any other operator address
 //      from escrow. Fees, if ever charged, are invoiced separately; taking
 //      them as an escrow output would make the operator a recipient of the
-//      client's funds (an attorney question before any mainnet fees).
-//   4. Never co-sign on mainnet unless explicitly allowed (testnet-only today).
+//      client's funds (an attorney question before any mainnet fees). This
+//      holds even if the fee gate in src/compliance/gates.ts is ever set:
+//      no fees during testnet/beta, and any future fee is a separate invoice.
+//   4. Never co-sign on mainnet unless explicitly allowed AND the legal-review
+//      gate in src/compliance/gates.ts is set (it is false: testnet-only).
 //   5. Refuse if any party or output address is on the operator's sanctions
 //      denylist (src/compliance/screening.ts).
 // The verifier never needs, and must never hold, the client's or contractor's
 // private keys.
 import { decodeAddress, PREFIX, type Network } from "./address.ts";
 import { normalizeAddress, screenAddresses } from "../compliance/screening.ts";
+import { mainnetAllowed, type LegalGates } from "../compliance/gates.ts";
 
 export const PLATFORM_FEE_FROM_ESCROW = false as const;
 
@@ -47,6 +51,7 @@ export interface CosignPolicy {
   operatorAddresses?: Iterable<string>; // verifier / Stimuli addresses: never paid from escrow
   denylist?: ReadonlySet<string>;
   allowMainnet?: boolean;
+  gates?: LegalGates;                   // defaults to LEGAL_GATES (mainnet locked)
 }
 
 export interface CosignDecision {
@@ -65,7 +70,7 @@ function checkAddress(a: string, network: Network, label: string, reasons: strin
 
 export function verifierCosignDecision(req: CosignRequest, policy: CosignPolicy = {}): CosignDecision {
   const reasons: string[] = [];
-  if (req.network === "kaspa-mainnet" && !policy.allowMainnet) reasons.push("mainnet co-signing is disabled (testnet-only until legal review)");
+  if (req.network === "kaspa-mainnet" && !mainnetAllowed(policy.allowMainnet, policy.gates)) reasons.push("mainnet co-signing is disabled (testnet-only until legal review)");
   if (!/^[0-9a-f]{64}$/.test(req.specSha256)) reasons.push("specSha256 must be 64 lowercase hex chars");
   if (req.outputs.length === 0) reasons.push("transaction has no outputs");
 

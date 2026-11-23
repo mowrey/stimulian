@@ -6,7 +6,7 @@ import { checkAll } from "./criteria.ts";
 import { buildPayload, generateVerifierKey, signProof, verifyProof, type MilestoneProof } from "./proof.ts";
 import { buildEscrow, checkRefundLockTime, parseLockTime } from "./kaspa/escrow.ts";
 import { verifierCosignDecision, type CosignRequest } from "./kaspa/policy.ts";
-import { loadDenylist } from "./compliance/screening.ts";
+import { loadBundledSdnList, loadDenylist, MAX_LIST_AGE_DAYS, WARN_LIST_AGE_DAYS } from "./compliance/screening.ts";
 import { cascadeReport, simulateCascade } from "./model/cascade.ts";
 import { estimateGainPerAlpha, simulateGateSweep, simulateRefinement } from "./model/convergence.ts";
 import { loadSpec, specHash } from "./spec.ts";
@@ -22,7 +22,10 @@ const USAGE = `stimulian — Stimuli Network milestone verifier
                 --refund-after <DAA score | ISO date> [--current-daa <score>]
                 (keys: 32-byte x-only Schnorr, hex; testnet only)
   cosign-check  --request <cosign.json> [--denylist <file>] [--operator <address>]...
-                (verifier policy check before co-signing a release; exit 0 = allowed)
+                (verifier policy check before co-signing a release; exit 0 = allowed.
+                 Always screens against the bundled OFAC SDN address list, data/; --denylist adds more.
+                 Refuses when that list is over ${MAX_LIST_AGE_DAYS} days old: run scripts/update-ofac-sdn.ts)
+  sdn-status    (date and size of the bundled OFAC SDN address list)
   cascade       --n <fan-out> --delta <fidelity> [--hops 12] [--runs <monte carlo runs>] [--seed 1]
   gate          --nodes <N> [--alpha 2] [--replications 3000] [--seed 1]      (theta sweep of one convergence step)
   refine        --alpha <rate> [--theta 0.6] [--rounds 40] [--runs 200] [--seed 1]   (recursive refinement)
@@ -122,13 +125,24 @@ async function main(): Promise<number> {
         return { address: String(o.address), amountSompi: BigInt(o.amountSompi) };
       }),
     };
-    const decision = verifierCosignDecision(req, {
-      operatorAddresses: values.operator ?? [],
-      denylist: values.denylist ? loadDenylist(values.denylist) : undefined,
-    });
+    const sdn = loadBundledSdnList();
+    const denylist = new Set(sdn.denylist);
+    if (values.denylist) for (const a of loadDenylist(values.denylist)) denylist.add(a);
+    const decision = verifierCosignDecision(req, { operatorAddresses: values.operator ?? [], denylist });
+    if (sdn.ageDays > MAX_LIST_AGE_DAYS) {
+      decision.allow = false;
+      decision.reasons.push(`the bundled OFAC SDN list (published ${sdn.publishDate}) is ${sdn.ageDays} days old; refresh it with scripts/update-ofac-sdn.ts before co-signing`);
+    } else if (sdn.ageDays > WARN_LIST_AGE_DAYS) {
+      console.error(`warning: the bundled OFAC SDN list is ${sdn.ageDays} days old (published ${sdn.publishDate}); refresh it soon`);
+    }
     console.log(JSON.stringify(decision, null, 2));
-    if (!values.denylist) console.error("warning: no --denylist given; sanctions screening was skipped");
     return decision.allow ? 0 : 1;
+  }
+
+  if (cmd === "sdn-status") {
+    const sdn = loadBundledSdnList();
+    console.log(JSON.stringify({ publishDate: sdn.publishDate, ageDays: sdn.ageDays, addresses: sdn.denylist.size, byCurrency: sdn.byCurrency, maxAgeDays: MAX_LIST_AGE_DAYS }, null, 2));
+    return sdn.ageDays > MAX_LIST_AGE_DAYS ? 1 : 0;
   }
 
   if (cmd === "cascade") {

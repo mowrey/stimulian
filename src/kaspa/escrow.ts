@@ -24,6 +24,7 @@
 import { blake2b } from "./blake2b.ts";
 import { encodeAddress, PREFIX, VERSION, type Network } from "./address.ts";
 import { disassemble, hex, OP, ScriptBuilder } from "./script.ts";
+import { mainnetAllowed, MAINNET_REFUSED, type LegalGates } from "../compliance/gates.ts";
 
 export const LOCK_TIME_THRESHOLD = 500_000_000_000n;
 
@@ -34,10 +35,12 @@ export interface EscrowParams {
   verifierPubKey: string;
   refundLockTime: bigint;   // DAA score (< threshold) or Unix ms (>= threshold)
   network: Network;
-  // Mainnet is refused unless the caller opts in explicitly. Stimuli Network
-  // tooling is testnet-only until legal review; tests use this to check
-  // address encoding only.
+  // Mainnet is refused unless the caller opts in explicitly AND the legal
+  // review gate is set (src/compliance/gates.ts, false today). Stimuli Network
+  // tooling is testnet-only until legal review; tests pass their own gates to
+  // check address encoding only.
   allowMainnet?: boolean;
+  gates?: LegalGates;
 }
 
 export interface Escrow {
@@ -79,8 +82,8 @@ export function p2shScriptPublicKey(redeemScript: Uint8Array): Uint8Array {
 }
 
 export function buildEscrow(p: EscrowParams): Escrow {
-  if (p.network === "kaspa-mainnet" && !p.allowMainnet) {
-    throw new Error("mainnet escrow is disabled: Stimuli Network tooling is testnet-only until legal review");
+  if (p.network === "kaspa-mainnet" && !mainnetAllowed(p.allowMainnet, p.gates)) {
+    throw new Error(`mainnet escrow refused: ${MAINNET_REFUSED}`);
   }
   const redeem = buildRedeemScript(p);
   return {
