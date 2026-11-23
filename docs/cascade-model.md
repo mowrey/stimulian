@@ -74,5 +74,5 @@ fan-out and fixed fidelity (paper, Section 7). On real, finite, clustered networ
 reach saturates and the effective `n` falls over time, so treat these numbers as
 an upper bound on spread and a guide to which side of the threshold you are on,
 not as a forecast. The paper's numbers are synthetic simulations, not measurements.
-The other phases of the paper (gated, capability-weighted convergence and the
-recursive refinement) are not implemented here yet.
+The gated, capability-weighted convergence step and the recursive refinement loop
+are in [`convergence.ts`](convergence-model.md).
