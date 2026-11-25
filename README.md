@@ -2,16 +2,14 @@
 
 Open tooling for **Stimuli Network** — https://stimuli.network
 
-Stimuli Network pairs client organizations with student technologists working as
-independent contractors. Work is paid by milestone: autonomous bots check the
-delivered code against agreed acceptance criteria, and only a verified milestone
-can release the client's funds from a **non-custodial Kaspa escrow**. Stimuli
-Network never holds the money.
+Stimuli Network builds software for clients, paid by milestone in US dollars.
+Each milestone has written acceptance checks, and a bot verifies the delivered
+code against them at the exact commit. A non-custodial **Kaspa escrow**, in which
+Stimuli Network never holds the money, is in testnet and is not offered to
+clients until it clears legal review.
 
-This repository holds the pieces that make that loop work, starting with the
-milestone verifier.
-
-> Stimuli Network is a future business idea, not an operating business.
+This repository holds the open tooling behind that loop: the milestone verifier,
+the testnet escrow builder, and the working paper's models.
 
 ## Milestone verifier
 

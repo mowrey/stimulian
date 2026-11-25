@@ -1,8 +1,8 @@
 # Compliance design notes
 
 These notes explain the design choices in this repository that exist for
-regulatory reasons. They are engineering notes, not legal advice, and Stimuli
-Network is not an operating business. Everything here runs on Kaspa testnet.
+regulatory reasons. They are engineering notes, not legal advice. Client work is
+billed in US dollars; everything escrow-related here runs on Kaspa testnet only.
 
 ## Non-custodial escrow
 
