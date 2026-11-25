@@ -59,3 +59,7 @@ Details in [docs/convergence-model.md](docs/convergence-model.md).
 
 See [docs/architecture.md](docs/architecture.md) for the trust model, the escrow
 design, and the roadmap.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
